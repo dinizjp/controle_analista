@@ -183,7 +183,7 @@ def page_dash():
     
     fig1.update_traces(textposition='outside')
 
-    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(fig1, use_container_width=True, key="fig1")
 
     # Gráfico 2: Produtos Mais Vendidos no Período Selecionado
     st.subheader("Produtos mais vendidos do período")
@@ -197,7 +197,7 @@ def page_dash():
     
     fig2.update_traces(textposition='outside')
 
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, use_container_width=True, key="fig2")
 
     # Tabela de Sugestão de Compra baseada no consumo
     st.subheader("Sugestão de Compra")
