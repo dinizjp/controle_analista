@@ -1,0 +1,5 @@
+streamlit=1.42.2
+psycopg2-binary==2.9.10
+pandas==2.2.2
+plotly==6.0.0
+xmltodict==0.14.2
