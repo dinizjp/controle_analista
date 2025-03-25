@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import plotly.express as px
+import io
 from utils import get_lojas, get_estoque_at_date, get_compras_periodo, get_estoque_all, get_categorias, get_produtos
 
 # Configuração da página
@@ -11,6 +12,13 @@ st.set_page_config(page_title="Sugestão de Compra", layout="wide")
 # Inicializar o session_state para armazenar o DataFrame
 if 'df_calculado' not in st.session_state:
     st.session_state.df_calculado = None
+
+# Função para converter DataFrame em Excel
+def to_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sugestao_Compra')
+    return output.getvalue()
 
 # Função principal da página
 def page_sugestao_compra():
@@ -154,6 +162,15 @@ def page_sugestao_compra():
         st.dataframe(
             df[["produto_id", "nome", "estoque_atual", "estoque_necessario", "falta_sobra", "sugestao_compra"]],
             use_container_width=True
+        )
+
+        # Botão para baixar a tabela em Excel
+        excel_data = to_excel(df[["produto_id", "nome", "estoque_atual", "estoque_necessario", "falta_sobra", "sugestao_compra"]])
+        st.download_button(
+            label="Baixar Tabela em Excel",
+            data=excel_data,
+            file_name=f"sugestao_compra_{selected_loja_str}_{data_final.strftime('%Y-%m-%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
     # Exibir o gráfico apenas se o cálculo já foi feito
