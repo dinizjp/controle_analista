@@ -4,7 +4,7 @@ import pandas as pd
 import datetime
 import plotly.express as px
 import math
-from utils import get_lojas, get_estoque_at_date, get_categorias, get_produtos, get_saidas_diarias
+from utils import get_lojas, get_estoque_at_date, get_categorias, get_produtos, get_saidas_periodo  # Removido get_saidas_diarias
 
 # Configuração da página
 st.set_page_config(page_title="Sugestão de Compra", layout="wide")
@@ -28,24 +28,19 @@ def page_sugestao_compra():
        - Fórmula: Total de saídas no período ÷ Número de dias no período (arredondado para cima).  
        - Exemplo: 50 unidades saíram em 30 dias → \( 50 \div 30 = 1,67 \), arredondado para 2 unidades por dia.
 
-    2. **Média Móvel Simples**  
-       - Suavizamos o consumo diário com uma média móvel sobre um período (ex.: 7 dias).  
-       - Fórmula: Média das saídas diárias nos últimos N dias (arredondado para cima).  
-       - Exemplo: Saídas nos últimos 7 dias = [2, 3, 1, 4, 2, 3, 2] → Média = \( 17 \div 7 = 2,43 \), arredondado para 3.
-
-    3. **Ponto de Reordenamento (ROP)**  
+    2. **Ponto de Reordenamento (ROP)**  
        - O ROP é o estoque mínimo necessário até a próxima entrega.  
        - Fórmula: (Consumo Diário Médio × Lead Time) + Estoque de Segurança (arredondado para cima).  
        - *Lead Time*: Dias até a próxima entrega (data da rota + tempo de viagem).  
        - *Estoque de Segurança*: 10% do consumo diário × lead time (arredondado para cima).  
        - Exemplo: Consumo = 3, Lead Time = 10 dias, Estoque de Segurança = \( 0,1 \times 3 \times 10 = 3 \) → ROP = \( 3 \times 10 + 3 = 33 \).
 
-    4. **Sugestão de Compra**  
+    3. **Sugestão de Compra**  
        - Quantidade a comprar para atingir o ROP.  
        - Fórmula: Se Estoque Atual < ROP, então ROP - Estoque Atual (arredondado para cima); senão, 0.  
        - Exemplo: ROP = 33, Estoque Atual = 10 → Sugestão = \( 33 - 10 = 23 \).
 
-    Todos os valores são arredondados para cima para garantir quantidades inteiras e evitar faltas.
+    Todos os valores são arredondados para cima para garantir quantidades inteiras e evitar faltas. Note que não usamos média móvel aqui, apenas o consumo médio do período selecionado.
     """)
 
     # Seleção da loja
@@ -64,8 +59,6 @@ def page_sugestao_compra():
         data_proxima_rota = st.date_input("Data Próxima Rota", datetime.date.today() + datetime.timedelta(days=7))
     with col4:
         tempo_viagem = st.number_input("Tempo de Viagem (dias)", min_value=1, value=3)
-    
-    janela_media_movel = st.number_input("Janela da Média Móvel (dias)", min_value=1, value=7)
 
     if st.button("Calcular Sugestão de Compra"):
         dias_consumo = (data_final - data_inicial).days
@@ -83,21 +76,11 @@ def page_sugestao_compra():
         df["estoque_atual"].fillna(0, inplace=True)
         df["estoque_atual"] = df["estoque_atual"].astype(int)  # Garantir que estoque_atual seja inteiro
 
-        # Calcular consumo diário com média móvel por produto
-        for index, row in df.iterrows():
-            produto_id = row["produto_id"]
-            saidas_diarias = get_saidas_diarias(produto_id, selected_loja_id, data_inicial, data_final)
-            if not saidas_diarias.empty:
-                saidas_diarias.set_index('dia', inplace=True)
-                saidas_diarias = saidas_diarias.reindex(
-                    pd.date_range(data_inicial, data_final), fill_value=0
-                )
-                media_movel = saidas_diarias['saidas'].rolling(
-                    window=janela_media_movel, min_periods=1
-                ).mean().iloc[-1]
-                df.at[index, "consumo_diario_mm"] = math.ceil(media_movel)  # Arredondar para cima
-            else:
-                df.at[index, "consumo_diario_mm"] = 0
+        # Calcular consumo diário com base nas saídas do período
+        saidas_df = get_saidas_periodo(data_inicial, data_final, selected_loja_id)
+        df = pd.merge(df, saidas_df[["produto_id", "total_saidas"]], on="produto_id", how="left")
+        df["total_saidas"].fillna(0, inplace=True)
+        df["consumo_diario_mm"] = df["total_saidas"].apply(lambda x: math.ceil(x / dias_consumo) if dias_consumo > 0 else 0)
 
         # Calcular dias até a próxima entrega
         dias_proxima_entrega = (data_proxima_rota - data_final).days + tempo_viagem
