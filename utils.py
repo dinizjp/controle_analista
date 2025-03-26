@@ -63,7 +63,7 @@ def get_estoque_loja(loja_id):
 # Função para buscar estoque geral ou filtrado por loja (ajustada para incluir data_ultima_contagem)
 def get_estoque_all(loja_id=None):
     query = """
-        SELECT e.loja_id, p.id AS produto_id, p.nome, e.quantidade, e.data_atualizacao, e.data_ultima_contagem
+        SELECT e.loja_id, p.id AS produto_id, p.nome, e.quantidade, e.data_atualizacao, e.data_contagem
         FROM estoque e
         JOIN produtos p ON e.produto_id = p.id
     """
@@ -105,14 +105,14 @@ def get_saidas_periodo(start_date, end_date, loja_id):
 def get_estoque_at_date(date, loja_id=None):
     date = dt.datetime.combine(date, dt.time.max)
     query = """
-        SELECT e.produto_id, p.nome, e.quantidade, e.data_ultima_contagem,
+        SELECT e.produto_id, p.nome, e.quantidade, e.data_contagem,
                COALESCE(SUM(CASE WHEN m.tipo = 'entrada' THEN m.quantidade ELSE 0 END), 0) -
                COALESCE(SUM(CASE WHEN m.tipo = 'saida' THEN m.quantidade ELSE 0 END), 0) AS ajuste_movimentacoes
         FROM estoque e
         JOIN produtos p ON e.produto_id = p.id
         LEFT JOIN movimentacoes_estoque m ON e.produto_id = m.produto_id 
             AND m.loja_id = e.loja_id 
-            AND m.data > e.data_ultima_contagem 
+            AND m.data > e.data_contagem 
             AND m.data <= %s
     """
     params = [date]
@@ -121,7 +121,7 @@ def get_estoque_at_date(date, loja_id=None):
         params.append(loja_id)
     else:
         query += " WHERE 1=1"  # Condição neutra para evitar erro de sintaxe
-    query += " GROUP BY e.produto_id, p.nome, e.quantidade, e.data_ultima_contagem"
+    query += " GROUP BY e.produto_id, p.nome, e.quantidade, e.data_contagem"
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
             cursor.execute(query, tuple(params))
@@ -282,10 +282,10 @@ def registrar_contagem(loja_id, produto_id, quantidade, data_contagem=None):
             """, (produto_id, loja_id, quantidade, data_contagem))
             # Atualiza o estoque com a quantidade e a data da contagem
             cursor.execute("""
-                INSERT INTO estoque (loja_id, produto_id, quantidade, data_atualizacao, data_ultima_contagem)
+                INSERT INTO estoque (loja_id, produto_id, quantidade, data_atualizacao, data_contagem)
                 VALUES (%s, %s, %s, %s, %s)
                 ON CONFLICT (loja_id, produto_id)
-                DO UPDATE SET quantidade = %s, data_atualizacao = %s, data_ultima_contagem = %s
+                DO UPDATE SET quantidade = %s, data_atualizacao = %s, data_contagem = %s
             """, (loja_id, produto_id, quantidade, data_contagem, data_contagem, quantidade, data_contagem, data_contagem))
         conn.commit()
 
