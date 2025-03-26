@@ -23,7 +23,7 @@ def page_sugestao_compra():
     Esta página ajuda a decidir quanto comprar de cada produto com base no consumo real e na previsão de necessidade até a próxima entrega. Veja as técnicas que usamos:
 
     1. **Consumo Diário**  
-       - Calculamos o consumo diário usando as *saídas reais* registradas no sistema.  
+       - Calculamos o consumo diário usando as *saídas reais* registradas no sistema (não o CMV).  
        - Fórmula: Total de saídas no período ÷ Número de dias no período.  
        - Isso reflete o que foi realmente consumido ou vendido.
 
@@ -42,7 +42,7 @@ def page_sugestao_compra():
        - Se o estoque atual for menor que o ROP, sugerimos comprar o que falta (ROP - Estoque Atual).  
        - Se o estoque atual for suficiente, a sugestão é 0.
 
-    Essas técnicas garantem que você tenha estoque suficiente sem exagerar nas compras
+    Essas técnicas garantem que você tenha estoque suficiente sem exagerar nas compras!
     """)
 
     # Seleção da loja
@@ -174,8 +174,7 @@ def page_sugestao_compra():
             x="nome",
             y="sugestao_compra",
             labels={"nome": "Produto", "sugestao_compra": "Quantidade a Comprar"},
-            title=f"Sugestão de Compra - Loja {selected_loja_str} (Categoria: {selected_categoria})",
-            height=800
+            title=f"Sugestão de Compra - Loja {selected_loja_str} (Categoria: {selected_categoria})"
         )
         st.plotly_chart(fig, use_container_width=True)
 
