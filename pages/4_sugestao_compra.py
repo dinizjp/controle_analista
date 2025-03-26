@@ -15,13 +15,10 @@ if 'df_calculado' not in st.session_state:
 
 # Função principal da página
 def page_sugestao_compra():
-    """Página de sugestão de compra integrada com as funções do utils.py."""
     st.title("Sugestão de Compra")
 
     # Explicação detalhada das técnicas utilizadas
     st.markdown("""
-        ### Como Funciona a Sugestão de Compra
-
         #### 1. Consumo Diário
         - **O que é**: É a quantidade média de um produto que sai do estoque por dia.
         - **Como calculamos**: Pegamos o total de saídas (vendas ou retiradas) do produto no período que você escolheu e dividimos pelo número de dias desse período. 
