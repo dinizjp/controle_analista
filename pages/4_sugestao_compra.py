@@ -106,7 +106,7 @@ def page_sugestao_compra():
             x="nome",
             y="sugestao_compra",
             labels={"nome": "Produto", "sugestao_compra": "Quantidade a Comprar"},
-            title=f"Sugestão de Compra - Loja {selected_loja_str} (Categoria: {selected_categoria})"
+            title=f"Sugestão de Compra - Loja {selected_loja_str} (Categoria: {selected_categoria})",
             height=800
         )
         st.plotly_chart(fig, use_container_width=True)
