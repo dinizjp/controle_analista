@@ -4,7 +4,7 @@ import pandas as pd
 import datetime
 import plotly.express as px
 import math
-from utils import get_lojas, get_estoque_at_date, get_categorias, get_produtos, get_saidas_diarias
+from utils import get_lojas, get_estoque_at_date, get_categorias, get_produtos, get_saidas_periodo
 
 # Configuração da página
 st.set_page_config(page_title="Sugestão de Compra", layout="wide")
@@ -15,7 +15,6 @@ if 'df_calculado' not in st.session_state:
 
 # Função principal da página
 def page_sugestao_compra():
-    """Página de sugestão de compra integrada com as funções do utils.py."""
     st.title("Sugestão de Compra")
 
     # Seleção da loja
@@ -43,7 +42,7 @@ def page_sugestao_compra():
             st.error("A Data Final deve ser posterior à Data Inicial.")
             return
 
-        # Obter estoque atual com base na data final, considerando a última contagem
+        # Obter estoque atual ajustado com base em data_contagem
         estoque_atual_df = get_estoque_at_date(data_final, selected_loja_id).rename(columns={"quantidade_ajustada": "estoque_atual"})
         produtos_df = pd.DataFrame(get_produtos(), columns=["id", "nome", "categoria", "unidade_medida", "valor"])
         produtos_df = produtos_df[["id", "categoria", "nome"]].rename(columns={"id": "produto_id"})
@@ -52,21 +51,19 @@ def page_sugestao_compra():
         df = pd.merge(produtos_df, estoque_atual_df[["produto_id", "estoque_atual"]], on="produto_id", how="left")
         df["estoque_atual"].fillna(0, inplace=True)
 
-        # Calcular consumo diário com média móvel por produto
-        for index, row in df.iterrows():
-            produto_id = row["produto_id"]
-            saidas_diarias = get_saidas_diarias(produto_id, selected_loja_id, data_inicial, data_final)
-            if not saidas_diarias.empty:
-                saidas_diarias.set_index('dia', inplace=True)
-                saidas_diarias = saidas_diarias.reindex(
-                    pd.date_range(data_inicial, data_final), fill_value=0
-                )
-                media_movel = saidas_diarias['saidas'].rolling(
-                    window=janela_media_movel, min_periods=1
-                ).mean().iloc[-1]
-                df.at[index, "consumo_diario_mm"] = media_movel
-            else:
-                df.at[index, "consumo_diario_mm"] = 0
+        # Obter todas as saídas do período em uma única consulta
+        saidas_df = get_saidas_periodo(data_inicial, data_final, selected_loja_id)
+        if not saidas_df.empty:
+            # Pivotar os dados para ter produtos como colunas e dias como linhas
+            saidas_pivot = saidas_df.pivot(index="dia", columns="produto_id", values="total_saidas").fillna(0)
+            # Reindexar para garantir todos os dias no período
+            saidas_pivot = saidas_pivot.reindex(pd.date_range(data_inicial, data_final), fill_value=0)
+            # Calcular média móvel para todos os produtos de uma vez
+            media_movel = saidas_pivot.rolling(window=janela_media_movel, min_periods=1).mean().iloc[-1]
+            # Mapear a média móvel para o DataFrame principal
+            df["consumo_diario_mm"] = df["produto_id"].map(media_movel).fillna(0)
+        else:
+            df["consumo_diario_mm"] = 0
 
         # Calcular dias até a próxima entrega
         dias_proxima_entrega = (data_proxima_rota - data_final).days + tempo_viagem
@@ -74,7 +71,7 @@ def page_sugestao_compra():
             st.error("A Data Próxima Rota deve ser posterior à Data Final.")
             return
 
-        # Calcular estoque de segurança e ponto de recompra (ROP)
+        # Calcular estoque de segurança e ROP
         estoque_seguranca = 0.1 * df["consumo_diario_mm"] * dias_proxima_entrega
         df["rop"] = (df["consumo_diario_mm"] * dias_proxima_entrega) + estoque_seguranca
 
@@ -109,7 +106,7 @@ def page_sugestao_compra():
             x="nome",
             y="sugestao_compra",
             labels={"nome": "Produto", "sugestao_compra": "Quantidade a Comprar"},
-            title=f"Sugestão de Compra - Loja {selected_loja_str} (Categoria: {selected_categoria})",
+            title=f"Sugestão de Compra - Loja {selected_loja_str} (Categoria: {selected_categoria})"
             height=800
         )
         st.plotly_chart(fig, use_container_width=True)

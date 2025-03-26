@@ -16,7 +16,7 @@ def get_db_connection():
     return conn
 
 # Função para buscar lista de lojas (com cache)
-@st.cache_data(ttl=600)  # Cache por 10 minutos
+@st.cache_data(ttl=600)
 def get_lojas():
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
@@ -60,7 +60,7 @@ def get_estoque_loja(loja_id):
             estoque = cursor.fetchall()
     return estoque
 
-# Função para buscar estoque geral ou filtrado por loja (ajustada para incluir data_ultima_contagem)
+# Função para buscar estoque geral ou filtrado por loja
 def get_estoque_all(loja_id=None):
     query = """
         SELECT e.loja_id, p.id AS produto_id, p.nome, e.quantidade, e.data_atualizacao, e.data_contagem
@@ -83,15 +83,15 @@ def get_estoque_all(loja_id=None):
         df['loja_id'] = df['loja_id'].astype(int)
     return df
 
-# Função para buscar saídas no período
+# Função para buscar saídas no período (otimizada para uma única consulta)
 def get_saidas_periodo(start_date, end_date, loja_id):
     start_datetime = dt.datetime.combine(start_date, dt.time.min)
     end_datetime = dt.datetime.combine(end_date, dt.time.max)
     query = """
-        SELECT m.produto_id, SUM(m.quantidade) as total_saidas
+        SELECT m.produto_id, DATE(m.data) AS dia, SUM(m.quantidade) AS total_saidas
         FROM movimentacoes_estoque m
         WHERE m.tipo = 'saida' AND m.data BETWEEN %s AND %s AND m.loja_id = %s
-        GROUP BY m.produto_id
+        GROUP BY m.produto_id, DATE(m.data)
     """
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
@@ -101,7 +101,7 @@ def get_saidas_periodo(start_date, end_date, loja_id):
     df = pd.DataFrame(data, columns=columns)
     return df
 
-# Função ajustada para calcular o estoque em uma data específica com base na última contagem
+# Função para calcular o estoque em uma data específica usando data_contagem
 def get_estoque_at_date(date, loja_id=None):
     date = dt.datetime.combine(date, dt.time.max)
     query = """
@@ -112,7 +112,7 @@ def get_estoque_at_date(date, loja_id=None):
         JOIN produtos p ON e.produto_id = p.id
         LEFT JOIN movimentacoes_estoque m ON e.produto_id = m.produto_id 
             AND m.loja_id = e.loja_id 
-            AND m.data > e.data_contagem 
+            AND m.data > COALESCE(e.data_contagem, e.data_atualizacao) 
             AND m.data <= %s
     """
     params = [date]
@@ -120,7 +120,7 @@ def get_estoque_at_date(date, loja_id=None):
         query += " WHERE e.loja_id = %s"
         params.append(loja_id)
     else:
-        query += " WHERE 1=1"  # Condição neutra para evitar erro de sintaxe
+        query += " WHERE 1=1"
     query += " GROUP BY e.produto_id, p.nome, e.quantidade, e.data_contagem"
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
@@ -128,7 +128,6 @@ def get_estoque_at_date(date, loja_id=None):
             data = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
     df = pd.DataFrame(data, columns=columns)
-    # Calcula o estoque ajustado: quantidade da última contagem + ajuste das movimentações
     df['quantidade_ajustada'] = df['quantidade'] + df['ajuste_movimentacoes']
     return df[['produto_id', 'nome', 'quantidade_ajustada']]
 
@@ -268,19 +267,15 @@ def registrar_entrada_xml(loja_id, itens):
                 """, (loja_id, produto_id, quantidade, quantidade))
         conn.commit()
 
-# Nova função para registrar contagem de inventário com data específica
+# Função para registrar contagem de inventário com data específica
 def registrar_contagem(loja_id, produto_id, quantidade, data_contagem=None):
-    """Registra uma contagem de inventário e atualiza o estoque com a data fornecida."""
     with get_db_connection() as conn:
         with conn.cursor() as cursor:
-            # Usa a data atual se nenhuma data_contagem for fornecida
             data_contagem = data_contagem if data_contagem else dt.datetime.now()
-            # Registra a movimentação de ajuste
             cursor.execute("""
                 INSERT INTO movimentacoes_estoque (tipo, produto_id, loja_id, quantidade, motivo, data)
                 VALUES ('ajuste', %s, %s, %s, 'Contagem de Inventário', %s)
             """, (produto_id, loja_id, quantidade, data_contagem))
-            # Atualiza o estoque com a quantidade e a data da contagem
             cursor.execute("""
                 INSERT INTO estoque (loja_id, produto_id, quantidade, data_atualizacao, data_contagem)
                 VALUES (%s, %s, %s, %s, %s)
@@ -288,24 +283,3 @@ def registrar_contagem(loja_id, produto_id, quantidade, data_contagem=None):
                 DO UPDATE SET quantidade = %s, data_atualizacao = %s, data_contagem = %s
             """, (loja_id, produto_id, quantidade, data_contagem, data_contagem, quantidade, data_contagem, data_contagem))
         conn.commit()
-
-# Nova função para buscar saídas diárias por produto
-def get_saidas_diarias(produto_id, loja_id, start_date, end_date):
-    """Retorna as saídas diárias de um produto em um intervalo de datas."""
-    start_datetime = dt.datetime.combine(start_date, dt.time.min)
-    end_datetime = dt.datetime.combine(end_date, dt.time.max)
-    query = """
-        SELECT DATE(m.data) as dia, SUM(m.quantidade) as saidas
-        FROM movimentacoes_estoque m
-        WHERE m.tipo = 'saida' AND m.produto_id = %s AND m.loja_id = %s
-              AND m.data BETWEEN %s AND %s
-        GROUP BY DATE(m.data)
-        ORDER BY dia
-    """
-    with get_db_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(query, (produto_id, loja_id, start_datetime, end_datetime))
-            data = cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description]
-    df = pd.DataFrame(data, columns=columns)
-    return df
