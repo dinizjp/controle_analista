@@ -283,3 +283,56 @@ def registrar_contagem(loja_id, produto_id, quantidade, data_contagem=None):
                 DO UPDATE SET quantidade = %s, data_atualizacao = %s, data_contagem = %s
             """, (loja_id, produto_id, quantidade, data_contagem, data_contagem, quantidade, data_contagem, data_contagem))
         conn.commit()
+
+def get_movimentacoes(loja_id, start_date, end_date):
+    start_datetime = dt.datetime.combine(start_date, dt.time.min)
+    end_datetime = dt.datetime.combine(end_date, dt.time.max)
+    query = """
+        SELECT m.id, m.tipo, m.produto_id, m.loja_id, m.quantidade, m.data, m.motivo, p.nome
+        FROM movimentacoes_estoque m
+        JOIN produtos p ON m.produto_id = p.id
+        WHERE m.data BETWEEN %s AND %s
+    """
+    params = [start_datetime, end_datetime]
+    if loja_id != "Todas":
+        query += " AND m.loja_id = %s"
+        params.append(loja_id)
+    query += " ORDER BY m.data"
+    with get_db_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(query, tuple(params))
+            data = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+    df = pd.DataFrame(data, columns=columns)
+    if not df.empty:
+        df['produto_id'] = df['produto_id'].astype(int)
+        df['loja_id'] = df['loja_id'].astype(int)
+    return df
+
+# Função para buscar entradas e saídas no período
+def get_entradas_saidas(start_date, end_date, loja_id=None, categoria=None):
+    start_datetime = dt.datetime.combine(start_date, dt.time.min)
+    end_datetime = dt.datetime.combine(end_date, dt.time.max)
+    query = """
+        SELECT p.nome, m.tipo, SUM(m.quantidade) as total
+        FROM movimentacoes_estoque m
+        JOIN produtos p ON m.produto_id = p.id
+        WHERE m.data BETWEEN %s AND %s
+    """
+    params = [start_datetime, end_datetime]
+    if loja_id and loja_id != "Todas":
+        query += " AND m.loja_id = %s"
+        params.append(loja_id)
+    if categoria and categoria != "Todas":
+        query += " AND p.categoria = %s"
+        params.append(categoria)
+    query += " GROUP BY p.nome, m.tipo ORDER BY p.nome, m.tipo"
+    with get_db_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(query, tuple(params))
+            data = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+    df = pd.DataFrame(data, columns=columns)
+    if not df.empty:
+        df['total'] = df['total'].astype(int)
+    return df
