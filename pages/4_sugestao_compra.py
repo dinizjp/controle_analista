@@ -20,28 +20,36 @@ def page_sugestao_compra():
 
     # Explicação detalhada das técnicas utilizadas
     st.markdown("""
-    ### Como Funciona a Sugestão de Compra
-    Esta página ajuda a decidir quanto comprar de cada produto com base no consumo real e na previsão de necessidade até a próxima entrega. Veja as técnicas que usamos:
+        ### Como Funciona a Sugestão de Compra
 
-    1. **Consumo Diário**  
-       - Calculamos o consumo diário usando as *saídas reais* registradas no sistema (não o CMV).  
-       - Fórmula: Total de saídas no período ÷ Número de dias no período (arredondado para cima).  
-       - Exemplo: 50 unidades saíram em 30 dias → \( 50 \div 30 = 1,67 \), arredondado para 2 unidades por dia.
+        Esta página foi feita para te ajudar a decidir quanto comprar de cada produto, de um jeito simples e baseado no que realmente está sendo consumido. A ideia é garantir que o estoque dure até a próxima entrega, sem exagerar na quantidade comprada. Vamos te explicar cada passo do processo de forma clara, com exemplos práticos, para você entender como chegamos aos números sugeridos.
 
-    2. **Ponto de Reordenamento (ROP)**  
-       - O ROP é o estoque mínimo necessário até a próxima entrega.  
-       - Fórmula: (Consumo Diário Médio × Lead Time) + Estoque de Segurança (arredondado para cima).  
-       - *Lead Time*: Dias até a próxima entrega (data da rota + tempo de viagem).  
-       - *Estoque de Segurança*: 10% do consumo diário × lead time (arredondado para cima).  
-       - Exemplo: Consumo = 3, Lead Time = 10 dias, Estoque de Segurança = \( 0,1 \times 3 \times 10 = 3 \) → ROP = \( 3 \times 10 + 3 = 33 \).
+        #### 1. Consumo Diário
+        - **O que é**: É a quantidade média de um produto que sai do estoque por dia.
+        - **Como calculamos**: Pegamos o total de saídas (vendas ou retiradas) do produto no período que você escolheu e dividimos pelo número de dias desse período. Se o resultado não for um número inteiro, arredondamos para cima, porque é melhor sobrar um pouco do que faltar.
+        - **Exemplo**: Se 50 unidades de um produto saíram em 30 dias, fazemos 50 ÷ 30 = 1,67. Arredondamos para 2 unidades por dia.
+        - **Por que usamos saídas reais**: As saídas mostram exatamente o que foi consumido, sem depender de ajustes ou cálculos complicados como o CMV (Custo de Mercadoria Vendida), que podem trazer erros.
 
-    3. **Sugestão de Compra**  
-       - Quantidade a comprar para atingir o ROP.  
-       - Fórmula: Se Estoque Atual < ROP, então ROP - Estoque Atual (arredondado para cima); senão, 0.  
-       - Exemplo: ROP = 33, Estoque Atual = 10 → Sugestão = \( 33 - 10 = 23 \).
+        #### 2. Ponto de Reordenamento (ROP)
+        - **O que é**: É o estoque mínimo que você precisa ter para cobrir o consumo até a próxima entrega chegar.
+        - **Como calculamos**: Multiplicamos o consumo diário médio pelo número de dias até a próxima entrega (o chamado "lead time") e somamos uma reserva extra, chamada "estoque de segurança".
+        - **Lead Time**: É o tempo total até o produto chegar, contando a data da próxima rota mais o tempo de viagem.
+        - **Estoque de Segurança**: Uma quantidade extra para imprevistos, como atrasos ou picos de demanda. Calculamos como 10% do consumo projetado para o lead time, arredondado para cima.
+        - **Exemplo**: Se o consumo diário é 3 unidades, o lead time é 10 dias, e o estoque de segurança é 10% de (3 × 10) = 3 unidades, o ROP fica assim: (3 × 10) + 3 = 33 unidades.
+        - **Por que usamos**: O ROP evita que o estoque acabe antes da próxima entrega, te dando uma margem de segurança.
 
-    Todos os valores são arredondados para cima para garantir quantidades inteiras e evitar faltas. Note que não usamos média móvel aqui, apenas o consumo médio do período selecionado.
-    """)
+        #### 3. Sugestão de Compra
+        - **O que é**: É a quantidade que você precisa comprar para que o estoque chegue ao nível do ROP.
+        - **Como calculamos**: Se o estoque atual estiver abaixo do ROP, subtraímos o estoque atual do ROP e arredondamos para cima. Se o estoque atual já for igual ou maior que o ROP, a sugestão é zero, porque não precisa comprar mais.
+        - **Exemplo**: Se o ROP é 33 e o estoque atual é 10, a sugestão é 33 - 10 = 23 unidades. Se o estoque atual for 35, a sugestão é 0.
+        - **Dica**: Sempre arredondamos para cima para garantir que você tenha quantidades inteiras e nunca falte produto.
+
+        #### Pontos Importantes
+        - **Valores inteiros**: Todos os números são arredondados para cima, porque trabalhamos com quantidades inteiras (não dá pra comprar meio produto!) e queremos evitar faltas.
+        - **Sem média móvel**: Para simplificar e agilizar, usamos apenas o consumo médio do período que você selecionou, sem cálculos mais complexos como média móvel.
+
+        Com essa explicação, você consegue entender direitinho como a sugestão de compra é feita e pode confiar nos números que aparecem na ferramenta.
+""")
 
     # Seleção da loja
     lojas = get_lojas()
@@ -108,24 +116,6 @@ def page_sugestao_compra():
             use_container_width=True
         )
 
-    # Exibir gráfico se houver dados calculados
-    if st.session_state.df_calculado is not None:
-        df = st.session_state.df_calculado
-        st.subheader("Gráfico de Sugestão de Compra")
-        categorias = get_categorias()
-        selected_categoria = st.selectbox("Selecione a categoria", ["Todas"] + categorias, key="categoria_grafico")
-        if selected_categoria != "Todas":
-            df_grafico = df[df["categoria"] == selected_categoria]
-        else:
-            df_grafico = df
-        fig = px.bar(
-            df_grafico,
-            x="nome",
-            y="sugestao_compra",
-            labels={"nome": "Produto", "sugestao_compra": "Quantidade a Comprar"},
-            title=f"Sugestão de Compra - Loja {selected_loja_str} (Categoria: {selected_categoria})"
-        )
-        st.plotly_chart(fig, use_container_width=True)
 
 if __name__ == "__main__":
     page_sugestao_compra()
