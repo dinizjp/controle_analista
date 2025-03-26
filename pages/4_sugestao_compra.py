@@ -22,14 +22,10 @@ def page_sugestao_compra():
     st.markdown("""
         ### Como Funciona a Sugestão de Compra
 
-        Esta página foi feita para te ajudar a decidir quanto comprar de cada produto, de um jeito simples e baseado no que realmente está sendo consumido. A ideia é garantir que o estoque dure até a próxima entrega, sem exagerar na quantidade comprada. Vamos te explicar cada passo do processo de forma clara, com exemplos práticos, para você entender como chegamos aos números sugeridos.
-
         #### 1. Consumo Diário
         - **O que é**: É a quantidade média de um produto que sai do estoque por dia.
-        - **Como calculamos**: Pegamos o total de saídas (vendas ou retiradas) do produto no período que você escolheu e dividimos pelo número de dias desse período. Se o resultado não for um número inteiro, arredondamos para cima, porque é melhor sobrar um pouco do que faltar.
-        - **Exemplo**: Se 50 unidades de um produto saíram em 30 dias, fazemos 50 ÷ 30 = 1,67. Arredondamos para 2 unidades por dia.
-        - **Por que usamos saídas reais**: As saídas mostram exatamente o que foi consumido, sem depender de ajustes ou cálculos complicados como o CMV (Custo de Mercadoria Vendida), que podem trazer erros.
-
+        - **Como calculamos**: Pegamos o total de saídas (vendas ou retiradas) do produto no período que você escolheu e dividimos pelo número de dias desse período. 
+        
         #### 2. Ponto de Reordenamento (ROP)
         - **O que é**: É o estoque mínimo que você precisa ter para cobrir o consumo até a próxima entrega chegar.
         - **Como calculamos**: Multiplicamos o consumo diário médio pelo número de dias até a próxima entrega (o chamado "lead time") e somamos uma reserva extra, chamada "estoque de segurança".
@@ -39,16 +35,9 @@ def page_sugestao_compra():
         - **Por que usamos**: O ROP evita que o estoque acabe antes da próxima entrega, te dando uma margem de segurança.
 
         #### 3. Sugestão de Compra
-        - **O que é**: É a quantidade que você precisa comprar para que o estoque chegue ao nível do ROP.
-        - **Como calculamos**: Se o estoque atual estiver abaixo do ROP, subtraímos o estoque atual do ROP e arredondamos para cima. Se o estoque atual já for igual ou maior que o ROP, a sugestão é zero, porque não precisa comprar mais.
+        - **Como calculamos**: Se o estoque atual estiver abaixo do ROP, subtraímos o estoque atual do ROP e arredondamos para cima. Se o estoque atual já for igual ou maior que o ROP, a sugestão é zero.
         - **Exemplo**: Se o ROP é 33 e o estoque atual é 10, a sugestão é 33 - 10 = 23 unidades. Se o estoque atual for 35, a sugestão é 0.
-        - **Dica**: Sempre arredondamos para cima para garantir que você tenha quantidades inteiras e nunca falte produto.
 
-        #### Pontos Importantes
-        - **Valores inteiros**: Todos os números são arredondados para cima, porque trabalhamos com quantidades inteiras (não dá pra comprar meio produto!) e queremos evitar faltas.
-        - **Sem média móvel**: Para simplificar e agilizar, usamos apenas o consumo médio do período que você selecionou, sem cálculos mais complexos como média móvel.
-
-        Com essa explicação, você consegue entender direitinho como a sugestão de compra é feita e pode confiar nos números que aparecem na ferramenta.
 """)
 
     # Seleção da loja
