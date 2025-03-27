@@ -1,4 +1,4 @@
-# sugestao_compras.py
+# sugestao_compra.py
 import streamlit as st
 import pandas as pd
 import datetime as dt
@@ -55,33 +55,31 @@ def page_sugestao_compra():
     if 'df_calculado' not in st.session_state:
         st.session_state.df_calculado = None
 
-
     st.title("Sugestão de Compra")
     
     st.markdown("""
-    ### Instruções para a utilização da ferramenta de Sugestão de Compra
-    
-    Este módulo tem como objetivo auxiliar na definição do pedido de compra dos produtos, garantindo que o estoque seja suficiente para suprir a demanda da loja até a chegada do caminhão de reposição.
-    
     1. **Período de Consumo:**  
-       Selecione um período (Data Inicial e Data Final) para calcular a média diária de consumo de cada produto.
-       
+       Escolha um período (Data Inicial e Data Final) para calcular a média diária de consumo de cada produto com base nas saídas registradas.
+
     2. **Estoque Atual:**  
-       A "foto" do estoque é obtida na **Data Final**, representando o último registro do estoque.
-       
+       O estoque mostrado é a "foto" do estoque na **Data Final**, ou seja, o último registro disponível até essa data.
+
     3. **Data de Chegada do Caminhão:**  
-       Informe a data prevista para a chegada do caminhão de reposição. Esse valor define o gap de dias entre a foto do estoque e a chegada do caminhão.
-       
-    4. **Cálculo da Sugestão de Compra:**  
-       - **Consumo Diário:** Total de saídas no período dividido pelo número de dias do período.
-       - **Estoque Ideal para 30 Dias:** Consumo diário multiplicado por 30 (pois as rotas são de 30 em 30 dias).
-       - **Consumo Extra (Gap):** Consumo diário multiplicado pelo número de dias entre a foto do estoque e a chegada do caminhão.
-       - **Estoque Ideal Total:** Soma do estoque ideal para 30 dias com o consumo extra do gap.
-       - **Sugestão de Compra:** Diferença entre o Estoque Ideal Total e o Estoque Atual (se positivo, arredondado para cima).
-       
+       Informe a data prevista para a chegada do próximo caminhão de reposição. Isso define o "gap" (dias entre a foto do estoque e a chegada do caminhão).
+
+    4. **Periodicidade da Rota:**  
+       Digite quantos dias a rota normalmente leva entre uma entrega e outra (ex.: 15, 30, 45 dias). Esse valor define o estoque ideal para o período entre rotas.
+
+    5. **Cálculo da Sugestão de Compra:**  
+       - **Consumo Diário:** Total de saídas no período dividido pelo número de dias do período.  
+       - **Estoque Ideal para a Rota:** Consumo diário multiplicado pela periodicidade da rota que você informou (arredondado para cima).  
+       - **Consumo Extra (Gap):** Consumo diário multiplicado pelo número de dias entre a foto do estoque e a chegada do caminhão.  
+       - **Estoque Ideal Total:** Estoque ideal para a rota + consumo extra do gap (arredondado para cima).  
+       - **Sugestão de Compra:** Diferença entre o Estoque Ideal Total e o Estoque Atual (se positivo, arredondado para cima; se não, zero).
+
     #### Dica:
-    - Utilize o filtro para exibir apenas os produtos com sugestão > 0.
-    - Após o cálculo, é possível baixar a tabela em Excel para facilitar a análise.
+    - Use o filtro para exibir apenas os produtos com sugestão > 0.  
+    - Após calcular, você pode baixar a tabela em Excel para analisar ou compartilhar.
     """)
     
     # Seleção da loja
@@ -90,15 +88,17 @@ def page_sugestao_compra():
     selected_loja_str = st.selectbox("Selecione a Loja", list(loja_options.keys()))
     selected_loja_id = loja_options[selected_loja_str]
     
-    # Inputs de datas
-    col1, col2, col3 = st.columns(3)
+    # Inputs de datas e periodicidade
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         data_inicial = st.date_input("Data Inicial do Período", dt.date.today() - dt.timedelta(days=30))
     with col2:
         data_final = st.date_input("Data Final do Período (Foto do Estoque)", dt.date.today())
     with col3:
         data_caminhao = st.date_input("Data de Chegada do Caminhão", dt.date.today() + dt.timedelta(days=5))
-        
+    with col4:
+        periodicidade_rota = st.number_input("Qual a periodicidade da rota (dias)?", min_value=1, value=30, step=1)
+
     if st.button("Calcular Sugestão de Compra"):
         dias_consumo = (data_final - data_inicial).days
         if dias_consumo <= 0:
@@ -134,14 +134,14 @@ def page_sugestao_compra():
             st.error("A Data de Chegada do Caminhão deve ser posterior à Data Final.")
             return
         
-        # Estoque ideal para 30 dias de consumo
-        estoque_ideal_mes = df["consumo_diario"] * 30
+        # Estoque ideal para a periodicidade da rota informada
+        estoque_ideal_rota = df["consumo_diario"] * periodicidade_rota
         
         # Consumo extra no gap
         consumo_gap = df["consumo_diario"] * gap
         
-        # Estoque ideal total: para 30 dias + consumo extra do gap
-        df["estoque_ideal_total"] = estoque_ideal_mes + consumo_gap
+        # Estoque ideal total: para a periodicidade da rota + consumo extra do gap
+        df["estoque_ideal_total"] = estoque_ideal_rota + consumo_gap
         
         # Sugestão de compra: se o estoque atual for menor que o estoque ideal total
         df["sugestao_compra"] = (df["estoque_ideal_total"] - df["estoque_atual"]).apply(lambda x: math.ceil(x) if x > 0 else 0)
