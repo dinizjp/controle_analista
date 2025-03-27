@@ -1,10 +1,10 @@
 # sugestao_compras.py
 import streamlit as st
 import pandas as pd
-import datetime
+import datetime as dt
 import math
 import io
-from utils import get_lojas, get_produtos
+from utils import get_lojas, get_produtos, get_db_connection
 
 # Configuração da página
 st.set_page_config(page_title="Sugestão de Compra", layout="wide")
@@ -52,9 +52,9 @@ def get_estoque_at_date(date, loja_id=None):
 
 def page_sugestao_compra():
     # Reinicializa a variável de cálculo para evitar persistência de dados antigos
-    if 'df_calculado' in st.session_state:
-        del st.session_state.df_calculado
-    st.session_state.df_calculado = None
+    if 'df_calculado' not in st.session_state:
+        st.session_state.df_calculado = None
+
 
     st.title("Sugestão de Compra")
     
@@ -93,11 +93,11 @@ def page_sugestao_compra():
     # Inputs de datas
     col1, col2, col3 = st.columns(3)
     with col1:
-        data_inicial = st.date_input("Data Inicial do Período", datetime.date.today() - datetime.timedelta(days=30))
+        data_inicial = st.date_input("Data Inicial do Período", dt.date.today() - dt.timedelta(days=30))
     with col2:
-        data_final = st.date_input("Data Final do Período (Foto do Estoque)", datetime.date.today())
+        data_final = st.date_input("Data Final do Período (Foto do Estoque)", dt.date.today())
     with col3:
-        data_caminhao = st.date_input("Data de Chegada do Caminhão", datetime.date.today() + datetime.timedelta(days=5))
+        data_caminhao = st.date_input("Data de Chegada do Caminhão", dt.date.today() + dt.timedelta(days=5))
         
     if st.button("Calcular Sugestão de Compra"):
         dias_consumo = (data_final - data_inicial).days
