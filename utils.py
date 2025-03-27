@@ -83,54 +83,6 @@ def get_estoque_all(loja_id=None):
         df['loja_id'] = df['loja_id'].astype(int)
     return df
 
-# Função para buscar saídas no período (otimizada para uma única consulta)
-def get_saidas_periodo(start_date, end_date, loja_id):
-    start_datetime = dt.datetime.combine(start_date, dt.time.min)
-    end_datetime = dt.datetime.combine(end_date, dt.time.max)
-    query = """
-        SELECT m.produto_id, DATE(m.data) AS dia, SUM(m.quantidade) AS total_saidas
-        FROM movimentacoes_estoque m
-        WHERE m.tipo = 'saida' AND m.data BETWEEN %s AND %s AND m.loja_id = %s
-        GROUP BY m.produto_id, DATE(m.data)
-    """
-    with get_db_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(query, (start_datetime, end_datetime, loja_id))
-            data = cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description]
-    df = pd.DataFrame(data, columns=columns)
-    return df
-
-# Função para calcular o estoque em uma data específica usando data_contagem
-def get_estoque_at_date(date, loja_id=None):
-    date = dt.datetime.combine(date, dt.time.max)
-    query = """
-        SELECT e.produto_id, p.nome, e.quantidade, e.data_contagem,
-               COALESCE(SUM(CASE WHEN m.tipo = 'entrada' THEN m.quantidade ELSE 0 END), 0) -
-               COALESCE(SUM(CASE WHEN m.tipo = 'saida' THEN m.quantidade ELSE 0 END), 0) AS ajuste_movimentacoes
-        FROM estoque e
-        JOIN produtos p ON e.produto_id = p.id
-        LEFT JOIN movimentacoes_estoque m ON e.produto_id = m.produto_id 
-            AND m.loja_id = e.loja_id 
-            AND m.data > COALESCE(e.data_contagem, e.data_atualizacao) 
-            AND m.data <= %s
-    """
-    params = [date]
-    if loja_id and loja_id != "Todas":
-        query += " WHERE e.loja_id = %s"
-        params.append(loja_id)
-    else:
-        query += " WHERE 1=1"
-    query += " GROUP BY e.produto_id, p.nome, e.quantidade, e.data_contagem"
-    with get_db_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(query, tuple(params))
-            data = cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description]
-    df = pd.DataFrame(data, columns=columns)
-    df['quantidade_ajustada'] = df['quantidade'] + df['ajuste_movimentacoes']
-    return df[['produto_id', 'nome', 'quantidade_ajustada']]
-
 # Função para buscar compras no período
 def get_compras_periodo(start_date, end_date, loja_id=None):
     start_datetime = dt.datetime.combine(start_date, dt.time.min)
