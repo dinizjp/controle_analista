@@ -1,59 +1,49 @@
-```markdown
-# README.md
-
 # controle_analista
 
-## Objetivo
-O projeto *controle_analista* é uma ferramenta de controle de estoque e análise de vendas para lojas. Permite gerenciar informações de produtos, estoques, movimentações, além de gerar relatórios, dashboards e sugestões de compra com base nas vendas passadas e no estoque atual.
+## Descrição
+O projeto *controle_analista* é uma ferramenta para gerenciamento de estoque, análise de vendas e controle de movimentações em lojas. Ele oferece funcionalidades para visualizar gráficos de vendas, controlar estoques, corrigir lançamentos, realizar transferências entre lojas, registrar entradas por XML, e gerar sugestões de compras com base no histórico de vendas.
+
+## Sumário
+- [Dependências e Instalação](#dependências-e-instalação)
+- [Como rodar e testar](#como-rodar-e-testar)
+- [Estrutura de Pastas](#estrutura-de-pastas)
 
 ## Dependências e Instalação
-Para rodar o projeto, é necessário instalar as seguintes dependências listadas no arquivo `requirements.txt`:
-
-- streamlit==1.42.2  
-- psycopg2-binary==2.9.10  
-- pandas==2.2.2  
-- plotly==6.0.0  
-- xmltodict==0.14.2  
-- xlsxwriter==3.2.2  
-
-Para instalar, execute:
+As dependências necessárias para executar o projeto estão listadas no arquivo `requirements.txt`. Para instalá-las, utilize o comando:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Certifique-se de ter uma base de dados PostgreSQL configurada, com as tabelas necessárias, e atualize os segredos do Streamlit (`st.secrets`) com as credenciais corretas.
+Após a instalação, configure o banco de dados e os segredos do Streamlit (`st.secrets`) com as credenciais corretas.
 
 ## Como rodar e testar
-Após instalar as dependências e configurar o banco de dados, execute o aplicativo com:
+Para iniciar o projeto, execute o seguinte comando:
 
 ```bash
-streamlit run pages_1_dash.py
+streamlit run <nome_do_arquivo>.py
 ```
 
-A interface acessível pelo navegador permitirá interagir com o projeto, acessando os diferentes módulos:
-- Dashboard para análise de vendas e estoques (`pages_1_dash.py`)
-- Gestão de lojas (`home_page.py`)
-- Correções de estoque (`pages_2_controle_estoque.py`)
-- Entrada de produtos via XML (`pages_3_lancamento_xml.py`)
-- Sugestões de compra (`pages_4_sugestao_compra.py`)
+Os principais scripts para navegação são:
+- `pages_1_dash.py`: Dashboard de controle de estoque
+- `home_page.py`: Gerenciamento das lojas
+- `pages_2_controle_estoque.py`: Correções e transferências de estoque
+- `pages_3_lancamento_xml.py`: Entrada de produtos via XML
+- `pages_4_sugestao_compra.py`: Sugestões de compra
 
-## Estrutura e principais arquivos
-A estrutura do projeto inclui os seguintes arquivos principais:
+Abra o endereço localhost indicado no terminal para interagir com a aplicação.
 
-- `utils.py`: funções utilitárias para acesso ao banco, consultas e operações de manutenção.
-- `requirements.txt`: lista de dependências necessárias.
-- `home_page.py`: gerenciamento de lojas e updates.
-- `pages_1_dash.py`: painel de dashboard com gráficos, tabelas e relatórios.
-- `pages_2_controle_estoque.py`: páginas para ajustes e transferências de estoque.
-- `pages_3_lancamento_xml.py`: upload e processamento de XML para lançamentos.
-- `pages_4_sugestao_compra.py`: cálculo de sugestões de compra com base no histórico de vendas.
-
-Para rodar o projeto, acesse o terminal, navegue até a pasta do projeto e execute:
-
-```bash
-streamlit run pages_1_dash.py
+## Estrutura de Pastas
 ```
-
-Assim, o aplicativo será iniciado no navegador padrão, pronto para uso.
+.
+├── home_page.py
+├── pages_1_dash.py
+├── pages_2_controle_estoque.py
+├── pages_3_lancamento_xml.py
+├── pages_4_sugestao_compra.py
+├── requirements.txt
+└── utils.py
 ```
+- **`utils.py`**: funções auxiliares para conexão com o banco, consultas e operações de manutenção.
+- **`requirements.txt`**: lista de dependências necessárias.
+- **Demais arquivos `.py`**: componentes de interface e lógica para cada funcionalidade específica do sistema.
