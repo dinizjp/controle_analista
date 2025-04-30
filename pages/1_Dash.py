@@ -1,171 +1,160 @@
-# Dash.py
 import streamlit as st
-import plotly.express as px
 import pandas as pd
-import datetime
-import io
-from utils import get_lojas, get_db_connection, get_categorias, get_entradas_saidas, get_movimentacoes, get_estoque_all
+import datetime as dt
+import plotly.express as px
+
+from utils import (
+    get_lojas,
+    get_db_connection,
+    get_entradas_saidas,
+    get_estoque_all,
+    get_produtos,
+    get_historico_produtos,
+    get_categorias
+)
 
 st.set_page_config(page_title='Dash', layout='wide')
 
-# Função para buscar os 20 produtos mais vendidos de todos os tempos
-def get_all_time_sales(categoria=None):
-    query = """
-        SELECT m.produto_id, p.nome, p.categoria, SUM(m.quantidade) as total_vendido
+def get_period_sales(start_date, end_date, loja_id=None):
+    start_dt = dt.datetime.combine(start_date, dt.time.min)
+    end_dt   = dt.datetime.combine(end_date,   dt.time.max)
+    sql = """
+        SELECT m.produto_id, p.nome, p.categoria, SUM(m.quantidade) AS total_vendido
         FROM movimentacoes_estoque m
         JOIN produtos p ON m.produto_id = p.id
-        WHERE m.tipo = 'saida'
+        WHERE m.tipo='saida' AND m.data BETWEEN %s AND %s
     """
-    params = []
-    if categoria and categoria != "Todas":
-        query += " AND p.categoria = %s"
-        params.append(categoria)
-    query += " GROUP BY m.produto_id, p.nome, p.categoria ORDER BY total_vendido DESC LIMIT 20"
-    with get_db_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(query, tuple(params))
-            data = cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description]
-    return pd.DataFrame(data, columns=columns)
-
-# Função para buscar vendas no período selecionado
-def get_period_sales(start_date, end_date, loja_id=None, categoria=None):
-    start_datetime = datetime.datetime.combine(start_date, datetime.time.min)
-    end_datetime = datetime.datetime.combine(end_date, datetime.time.max)
-    query = """
-        SELECT m.produto_id, p.nome, p.categoria, SUM(m.quantidade) as total_vendido
-        FROM movimentacoes_estoque m
-        JOIN produtos p ON m.produto_id = p.id
-        WHERE m.tipo = 'saida' AND m.data BETWEEN %s AND %s
-    """
-    params = [start_datetime, end_datetime]
+    params = [start_dt, end_dt]
     if loja_id and loja_id != "Todas":
-        query += " AND m.loja_id = %s"
+        sql += " AND m.loja_id = %s"
         params.append(loja_id)
-    if categoria and categoria != "Todas":
-        query += " AND p.categoria = %s"
-        params.append(categoria)
-    query += " GROUP BY m.produto_id, p.nome, p.categoria ORDER BY total_vendido DESC"
+    sql += " GROUP BY m.produto_id, p.nome, p.categoria ORDER BY total_vendido DESC"
     with get_db_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(query, tuple(params))
-            data = cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description]
-    return pd.DataFrame(data, columns=columns)
+        return pd.read_sql(sql, conn, params=params)
 
-# Função para converter DataFrame em Excel
-def to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Sheet1')
-    return output.getvalue()
-
-# Função principal do dashboard
 def page_dash():
     st.title("Dashboard de Controle de Estoque - Analista de Suprimentos")
 
-    # Filtros
-    st.markdown("### Filtros")
-    col1, col2, col3, col4 = st.columns(4)
+    # 1) Filtros de Data e Loja
+    col1, col2, col3 = st.columns(3)
+    hoje = dt.date.today()
+    inicio_mes = hoje.replace(day=1)
+
     with col1:
-        default_start = datetime.date.today() - datetime.timedelta(days=30)
-        start_date = st.date_input("Data Inicial", default_start)
+        start_date = st.date_input("Data Inicial", inicio_mes, key="start_date")
     with col2:
-        default_end = datetime.date.today()
-        end_date = st.date_input("Data Final", default_end)
+        end_date   = st.date_input("Data Final", hoje,     key="end_date")
+    with col3:
+        lojas_opts = {f"{lid} – {nome}": lid for lid, nome in get_lojas()}
+        sel_loja   = st.selectbox("Selecione a loja", list(lojas_opts.keys()), key="store_select")
+        loja_id    = lojas_opts[sel_loja]
+
     if start_date > end_date:
-        st.error("A data inicial deve ser menor ou igual à data final.")
+        st.error("A Data Inicial deve ser anterior ou igual à Data Final.")
         return
 
-    lojas = get_lojas()
-    loja_options = {f"{l[0]} - {l[1]}": l[0] for l in lojas}
-    loja_options["Todas"] = "Todas"
-    with col3:
-        selected_loja_str = st.selectbox("Selecione a loja", list(loja_options.keys()))
-    selected_loja_id = loja_options[selected_loja_str]
+    # 2) Lista fixa de categorias (filtrada)
+    order        = ["Açaí", "Sorvetes", "Polpa", "Complementos",
+                    "Embalagens Distribuidora", "Uso e Consumo"]
+    todas_cats   = get_categorias()
+    ordered_cats = [c for c in order if c in todas_cats]
 
-    categorias = get_categorias()
-    with col4:
-        selected_categoria = st.selectbox("Selecione a categoria", ["Todas"] + categorias)
+    # --- 3) Estoque Atual por Produto ---
+    st.subheader("Estoque Atual por Produto")
+    stock_cats = st.multiselect("Categorias (Estoque)",
+                                ordered_cats,
+                                default=ordered_cats,
+                                key="stock_cats")
 
-    # Ajustar a categoria selecionada
-    if selected_categoria == "Todas":
-        selected_categoria = None
+    # Puxa estoque e remove a coluna 'nome' e 'loja_id' duplicadas
+    estoque_df = get_estoque_all(loja_id).drop(columns=['nome','loja_id'], errors='ignore')
 
-    # Buscar dados
-    all_time_sales_df = get_all_time_sales(selected_categoria)
-    period_sales_df = get_period_sales(start_date, end_date, selected_loja_id, selected_categoria)
-    estoque_df = get_estoque_all(selected_loja_id)
-    movimentacoes_df = get_movimentacoes(selected_loja_id, start_date, end_date)
+    # Puxa produtos e renomeia 'nome' para evitar duplicata
+    prod_df = pd.DataFrame(
+        get_produtos(),
+        columns=["produto_id", "nome", "categoria", "unidade_medida", "valor"]
+    ).rename(columns={"nome": "prod_nome"})
 
-    # Gráfico 1: Entradas e Saídas no Período
+    df_stock = (
+        estoque_df
+        .merge(prod_df[["produto_id", "prod_nome", "categoria"]],
+               on="produto_id", how="left")
+        .query("categoria in @stock_cats")
+    )
+    df_stock["categoria"] = pd.Categorical(df_stock["categoria"],
+                                           categories=ordered_cats,
+                                           ordered=True)
+    df_stock = (
+        df_stock
+        .sort_values(["categoria", "prod_nome"])
+        .rename(columns={"prod_nome": "nome"})
+    )
+    st.dataframe(df_stock, use_container_width=True)
+
+    # --- 4) Histórico de Movimentações por Produto ---
+    st.subheader("Histórico de Movimentações por Produto")
+    hist_cats = st.multiselect("Categorias (Histórico)",
+                               ordered_cats,
+                               default=ordered_cats,
+                               key="hist_cats")
+
+    df_hist = get_historico_produtos(loja_id, start_date, end_date)
+    st.dataframe(df_hist, use_container_width=True)
+
+    # --- 5) Gráfico: Entradas e Saídas ---
     st.subheader("Entradas e Saídas no Período")
-    entradas_saidas_df = get_entradas_saidas(start_date, end_date, selected_loja_id, selected_categoria)
-    if not entradas_saidas_df.empty:
-        fig1 = px.bar(entradas_saidas_df, 
-                      x="nome", 
-                      y="total", 
-                      color="tipo", 
-                      barmode="group", 
-                      height=700, 
-                      text="total",
-                      color_discrete_map={'entrada': '#00CC96', 'saida': '#EF553B'})
+    entries_cats = st.multiselect("Categorias (Entradas/Saídas)",
+                                  ordered_cats,
+                                  default=ordered_cats,
+                                  key="entries_cats")
+
+    entradas_saidas = get_entradas_saidas(start_date, end_date, loja_id)
+    entradas_saidas = (
+        entradas_saidas
+        .merge(prod_df[["prod_nome", "categoria"]],
+               left_on="nome", right_on="prod_nome",
+               how="left")
+        .drop(columns=["nome"])                  # descarta a coluna 'nome' original
+        .rename(columns={"prod_nome": "nome"})   # renomeia prod_nome para nome
+    )
+    entradas_saidas = entradas_saidas[entradas_saidas["categoria"].isin(entries_cats)]
+
+    if not entradas_saidas.empty:
+        fig1 = px.bar(
+            entradas_saidas,
+            x="nome",
+            y="total",
+            color="tipo",
+            barmode="group",
+            text="total",
+            height=800,
+            color_discrete_map={'entrada': '#00CC96', 'saida': '#EF553B'}
+        )
         fig1.update_traces(textposition='outside')
-        st.plotly_chart(fig1, use_container_width=True, key="fig1")
+        st.plotly_chart(fig1, use_container_width=True)
     else:
-        st.write("Nenhuma movimentação no período selecionado.")
+        st.write("Nenhuma movimentação para as categorias selecionadas.")
 
-    # Tabela de Estoque
-    st.subheader("Tabela de Estoque")
-    if selected_categoria:
-        estoque_df = estoque_df[estoque_df['nome'].isin(
-            get_period_sales(start_date, end_date, selected_loja_id, selected_categoria)['nome']
-        )]
-    st.dataframe(estoque_df, use_container_width=True)
-    excel_estoque = to_excel(estoque_df)
-    st.download_button(
-        label="Baixar Tabela de Estoque em Excel",
-        data=excel_estoque,
-        file_name="estoque.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    # Tabela de Movimentações
-    st.subheader("Tabela de Movimentações")
-    if selected_categoria:
-        movimentacoes_df = movimentacoes_df[movimentacoes_df['nome'].isin(
-            get_period_sales(start_date, end_date, selected_loja_id, selected_categoria)['nome']
-        )]
-    st.dataframe(movimentacoes_df, use_container_width=True)
-    excel_movimentacoes = to_excel(movimentacoes_df)
-    st.download_button(
-        label="Baixar Tabela de Movimentações em Excel",
-        data=excel_movimentacoes,
-        file_name="movimentacoes.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    # Gráfico 2: Produtos Mais Vendidos no Período Selecionado
+    # --- 6) Gráfico: Produtos Mais Vendidos ---
     st.subheader("Produtos Mais Vendidos no Período")
-    fig2 = px.bar(period_sales_df,
-                  x="nome", 
-                  y="total_vendido", 
-                  color="categoria",
-                  height=700, 
-                  text="total_vendido")
-    fig2.update_traces(textposition='outside')
-    st.plotly_chart(fig2, use_container_width=True, key="fig2")
+    sales_cats = st.multiselect("Categorias (Mais Vendidos)",
+                                ordered_cats,
+                                default=ordered_cats,
+                                key="sales_cats")
+    period_sales = get_period_sales(start_date, end_date, loja_id)
+    period_sales = period_sales[period_sales["categoria"].isin(sales_cats)]
 
-    # Gráfico 3: 20 Produtos Mais Vendidos ao Longo do Tempo
-    st.subheader("20 Produtos Mais Vendidos ao Longo do Tempo")
-    fig3 = px.bar(all_time_sales_df, 
-                  x="nome", 
-                  y="total_vendido", 
-                  color="categoria",
-                  height=700,
-                  text="total_vendido")
-    fig3.update_traces(textposition='outside')
-    st.plotly_chart(fig3, use_container_width=True, key="fig3")
+    if not period_sales.empty:
+        fig2 = px.bar(period_sales,
+                      x="nome",
+                      y="total_vendido",
+                      color="categoria",
+                      text="total_vendido",
+                      height=800)
+        fig2.update_traces(textposition='outside')
+        st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.write("Nenhum produto vendido nas categorias selecionadas.")
 
-# Executar o dashboard
-page_dash()
+if __name__ == "__main__":
+    page_dash()
