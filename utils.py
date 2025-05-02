@@ -360,52 +360,47 @@ def get_estoque_at_date(date, loja_id):
         params=(loja_id,)
     )
 
-def calc_sugestao_compra(loja_id: int,
-                         data_inicial: dt.date,
-                         data_final:   dt.date,
-                         data_caminhao: dt.date,
-                         periodicidade_rota: int) -> pd.DataFrame:
+def calc_sugestao_compra(loja_id, data_inicial, data_final, data_caminhao, periodicidade_rota):
     """
-    Retorna DataFrame com colunas:
-      produto_id, nome, categoria,
-      estoque_atual, consumo_diario,
-      estoque_ideal_total, sugestao_compra (unidades de entrada),
-      sugestao_unidade_compra (unidades de saída / compra)
-
-    - 'conversao' deve existir em get_produtos() e indicar quantas
-      UNIDADES DE ENTRADA cabem em 1 UNIDADE DE SAÍDA.
+    Calcula sugestão de compra em:
+      • unidades de contagem (sugestao_compra)
+      • unidades de compra (sugestao_unidade_compra)
     """
-    # 1) dias de consumo
     dias = (data_final - data_inicial).days
     if dias <= 0:
         raise ValueError("Data Final deve ser posterior à Data Inicial.")
-    # 2) dados
-    df_est = get_estoque_at_date(data_final, loja_id)       # cols: [produto_id, estoque_atual]
-    df_sai = get_saidas_periodo(data_inicial, data_final, loja_id)  # cols: [produto_id, total_saidas]
-    df_prod = get_produtos()  # DataFrame com colunas [produto_id, nome, categoria, un_saida, un_entrada, conversao]
-    # 3) junta tudo
+    # Estoque contado
+    df_est = get_estoque_at_date(data_final, loja_id)
+    # Saídas em unidades de contagem
+    df_sai = get_saidas_periodo(data_inicial, data_final, loja_id)
+    # Produtos já vem com 'conversao' (un_entrada → un_saida)
+    df_prod = get_produtos()  # retorna DataFrame com colunas: produto_id,nome,categoria,un_saida,un_entrada,conversao
+
+    # monta tudo num só DataFrame
     df = (
-        df_prod
+        df_prod[["produto_id","nome","categoria","conversao"]]
         .merge(df_est, on="produto_id", how="left")
         .merge(df_sai, on="produto_id", how="left")
     )
     df["estoque_atual"]  = df["estoque_atual"].fillna(0)
     df["total_saidas"]   = df["total_saidas"].fillna(0)
-    # 4) cálculo de consumo e estoque ideal
-    df["consumo_diario"]     = df["total_saidas"] / dias
+    df["consumo_diario"] = df["total_saidas"] / dias
+
     gap = (data_caminhao - data_final).days
     if gap < 0:
         raise ValueError("Data de chegada do caminhão deve ser ≥ Data Final.")
     df["estoque_ideal_total"] = df["consumo_diario"] * (periodicidade_rota + gap)
-    # 5) sugestão em unidades de entrada (o que falta em estoque)
+
+    # sugestão em unidades de contagem
     df["sugestao_compra"] = (
         df["estoque_ideal_total"] - df["estoque_atual"]
     ).apply(lambda x: math.ceil(x) if x > 0 else 0)
-    # 6) converte para unidades de saída (o que vamos comprar)
+
+    # **nova**: converte para unidades de compra
     df["sugestao_unidade_compra"] = (
         df["sugestao_compra"] / df["conversao"]
     ).apply(lambda x: math.ceil(x) if x > 0 else 0)
-    # 7) retorna somente as colunas que interessam
+
     return df[[
         "produto_id",
         "nome",
