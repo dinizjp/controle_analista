@@ -2,14 +2,8 @@ import streamlit as st
 import pandas as pd
 import datetime as dt
 import io
+from utils import  get_lojas, calc_sugestao_compra, create_purchase_order, get_purchase_orders, get_purchase_order_items
 
-from utils import (
-    get_lojas,
-    calc_sugestao_compra,
-    create_purchase_order,
-    get_purchase_orders,
-    get_purchase_order_items
-)
 
 st.set_page_config(page_title="Pedidos de Compra", layout="wide")
 
