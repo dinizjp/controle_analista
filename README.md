@@ -25,11 +25,11 @@ streamlit run <nome_do_arquivo>.py
 ```
 
 Os principais scripts para navegação são:
-- `pages_1_dash.py`: Dashboard de controle de estoque
+- `pages_1_Dash.py`: Dashboard de controle de estoque
 - `home_page.py`: Gerenciamento das lojas
-- `pages_2_controle_estoque.py`: Correções e transferências de estoque
-- `pages_3_lancamento_xml.py`: Entrada de produtos via XML
-- `pages_4_sugestao_compra.py`: Sugestões de compra
+- `pages_2_Controle_Estoque.py`: Correções e transferências de estoque
+- `pages_3_Lancamento_XML.py`: Entrada de produtos via XML
+- `pages_4_Sugestao_Compra.py`: Sugestões de compra
 
 Abra o endereço localhost indicado no terminal para interagir com a aplicação.
 
@@ -37,10 +37,10 @@ Abra o endereço localhost indicado no terminal para interagir com a aplicação
 ```
 .
 ├── home_page.py
-├── pages_1_dash.py
-├── pages_2_controle_estoque.py
-├── pages_3_lancamento_xml.py
-├── pages_4_sugestao_compra.py
+├── pages_1_Dash.py
+├── pages_2_Controle_Estoque.py
+├── pages_3_Lancamento_XML.py
+├── pages_4_Sugestao_Compra.py
 ├── requirements.txt
 └── utils.py
 ```
