@@ -29,14 +29,23 @@ def get_lojas():
 
 @st.cache_data(ttl=600)
 def get_produtos():
+    """
+    Retorna DataFrame com colunas:
+     produto_id, nome, categoria, un_saida, un_entrada, conversao
+    """
     with get_db_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT id, nome, categoria, un_saida, un_entrada
-                FROM produtos
-                ORDER BY nome
-            """)
-            return cursor.fetchall()
+        return pd.read_sql(
+            """
+            SELECT id       AS produto_id,
+                   nome,
+                   categoria,
+                   un_saida,
+                   un_entrada,
+                   conversao
+              FROM produtos
+            """,
+            conn
+        )
 
 @st.cache_data(ttl=600)
 def get_categorias():
@@ -351,35 +360,61 @@ def get_estoque_at_date(date, loja_id):
         params=(loja_id,)
     )
 
-def calc_sugestao_compra(loja_id, data_inicial, data_final, data_caminhao, periodicidade_rota):
+def calc_sugestao_compra(loja_id: int,
+                         data_inicial: dt.date,
+                         data_final:   dt.date,
+                         data_caminhao: dt.date,
+                         periodicidade_rota: int) -> pd.DataFrame:
+    """
+    Retorna DataFrame com colunas:
+      produto_id, nome, categoria,
+      estoque_atual, consumo_diario,
+      estoque_ideal_total, sugestao_compra (unidades de entrada),
+      sugestao_unidade_compra (unidades de saída / compra)
+
+    - 'conversao' deve existir em get_produtos() e indicar quantas
+      UNIDADES DE ENTRADA cabem em 1 UNIDADE DE SAÍDA.
+    """
+    # 1) dias de consumo
     dias = (data_final - data_inicial).days
     if dias <= 0:
         raise ValueError("Data Final deve ser posterior à Data Inicial.")
-    df_est = get_estoque_at_date(data_final, loja_id)
-    df_sai = get_saidas_periodo(data_inicial, data_final, loja_id)
-    df_prod = pd.DataFrame(
-        get_produtos(),
-        columns=["produto_id","nome","categoria","un_saida","un_entrada"]
-    )
+    # 2) dados
+    df_est = get_estoque_at_date(data_final, loja_id)       # cols: [produto_id, estoque_atual]
+    df_sai = get_saidas_periodo(data_inicial, data_final, loja_id)  # cols: [produto_id, total_saidas]
+    df_prod = get_produtos()  # DataFrame com colunas [produto_id, nome, categoria, un_saida, un_entrada, conversao]
+    # 3) junta tudo
     df = (
-        df_prod[["produto_id","nome","categoria"]]
+        df_prod
         .merge(df_est, on="produto_id", how="left")
         .merge(df_sai, on="produto_id", how="left")
     )
-    df["estoque_atual"]   = df["estoque_atual"].fillna(0)
-    df["total_saidas"]    = df["total_saidas"].fillna(0)
-    df["consumo_diario"]  = df["total_saidas"] / dias
+    df["estoque_atual"]  = df["estoque_atual"].fillna(0)
+    df["total_saidas"]   = df["total_saidas"].fillna(0)
+    # 4) cálculo de consumo e estoque ideal
+    df["consumo_diario"]     = df["total_saidas"] / dias
     gap = (data_caminhao - data_final).days
     if gap < 0:
         raise ValueError("Data de chegada do caminhão deve ser ≥ Data Final.")
     df["estoque_ideal_total"] = df["consumo_diario"] * (periodicidade_rota + gap)
-    df["sugestao_compra"]     = (
+    # 5) sugestão em unidades de entrada (o que falta em estoque)
+    df["sugestao_compra"] = (
         df["estoque_ideal_total"] - df["estoque_atual"]
-    ).apply(lambda x: math.ceil(x) if x>0 else 0)
+    ).apply(lambda x: math.ceil(x) if x > 0 else 0)
+    # 6) converte para unidades de saída (o que vamos comprar)
+    df["sugestao_unidade_compra"] = (
+        df["sugestao_compra"] / df["conversao"]
+    ).apply(lambda x: math.ceil(x) if x > 0 else 0)
+    # 7) retorna somente as colunas que interessam
     return df[[
-        "produto_id","nome","categoria",
-        "estoque_atual","consumo_diario",
-        "estoque_ideal_total","sugestao_compra"
+        "produto_id",
+        "nome",
+        "categoria",
+        "estoque_atual",
+        "consumo_diario",
+        "estoque_ideal_total",
+        "sugestao_compra",
+        "sugestao_unidade_compra"
     ]]
 
 # ——————————————
@@ -402,10 +437,6 @@ def create_purchase_order(loja_id, itens):
     return oid
 
 def get_purchase_orders(loja_id: int = None) -> pd.DataFrame:
-    """
-    Retorna um DataFrame com os pedidos de compra criados,
-    filtrados por loja_id se fornecido.
-    """
     sql = "SELECT id, loja_id, data_criacao FROM purchase_orders"
     params = []
     if loja_id:
@@ -429,4 +460,3 @@ def get_purchase_order_items(order_id):
         get_db_connection(),
         params=(order_id,)
     )
-

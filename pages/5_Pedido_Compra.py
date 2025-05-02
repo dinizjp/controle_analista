@@ -2,10 +2,9 @@ import streamlit as st
 import pandas as pd
 import datetime as dt
 import io
-from utils import  get_lojas, calc_sugestao_compra, create_purchase_order, get_purchase_orders, get_purchase_order_items
 
+from utils import get_lojas, calc_sugestao_compra, create_purchase_order, get_purchase_orders, get_purchase_order_items
 
-st.set_page_config(page_title="Pedidos de Compra", layout="wide")
 
 def to_excel(df: pd.DataFrame) -> bytes:
     out = io.BytesIO()
@@ -16,23 +15,22 @@ def to_excel(df: pd.DataFrame) -> bytes:
 def page_pedido_compra():
     st.title("Gerar e Consultar Pedidos de Compra")
 
-    # Seleção de loja
+    # --- seleção de loja e período ---
     lojas = get_lojas()
-    opts  = {f"{lid} – {nome}": lid for lid, nome in lojas}
-    sel   = st.selectbox("Selecione a loja", list(opts.keys()), key="pc_loja")
+    opts = {f"{lid} – {nome}": lid for lid, nome in lojas}
+    sel = st.selectbox("Selecione a loja", list(opts.keys()), key="pc_loja")
     loja_id = opts[sel]
 
-    # Período e parâmetros
     col1, col2, col3 = st.columns(3)
     hoje = dt.date.today()
     with col1:
         data_inicio = st.date_input("Início do Período", hoje - dt.timedelta(days=30))
     with col2:
-        data_fim    = st.date_input("Fim do Período", hoje)
+        data_fim = st.date_input("Fim do Período", hoje)
     with col3:
         periodicidade = st.number_input("Periodicidade (dias)", min_value=1, value=30)
 
-    # Botão de geração
+    # --- gerar pedido ---
     if st.button("Gerar Pedido de Compra Consolidado"):
         try:
             df_sug = calc_sugestao_compra(
@@ -46,20 +44,29 @@ def page_pedido_compra():
             st.error(str(e))
             return
 
-        itens = (
-            df_sug[["produto_id","sugestao_compra"]]
-            .query("sugestao_compra>0")
-            .rename(columns={"sugestao_compra":"quantidade"})
-            .to_dict("records")
-        )
+        # monta itens apenas com unidades de saída > 0
+        itens = [
+            {"produto_id": row["produto_id"],
+             "quantidade": int(row["sugestao_unidade_compra"])}
+            for _, row in df_sug.iterrows()
+            if row["sugestao_unidade_compra"] > 0
+        ]
+
         if not itens:
-            st.warning("Nenhum item com sugestão > 0.")
+            st.warning("Nenhum item com sugestão de compra > 0.")
         else:
             order_id = create_purchase_order(loja_id, itens)
             st.success(f"Pedido #{order_id} criado com sucesso!")
-            df_order = pd.DataFrame(itens).merge(
-                df_sug[["produto_id","nome"]], on="produto_id"
-            )
+
+            # prepara tabela para download
+            df_order = df_sug.loc[
+                df_sug["sugestao_unidade_compra"] > 0,
+                ["produto_id", "nome", "sugestao_compra", "sugestao_unidade_compra"]
+            ].rename(columns={
+                "sugestao_compra": "faltante_un_entrada",
+                "sugestao_unidade_compra": "quantidade_comprar_un_saida"
+            })
+
             excel = to_excel(df_order)
             st.download_button(
                 "📥 Baixar Pedido (Excel)",
@@ -69,7 +76,8 @@ def page_pedido_compra():
             )
 
     st.markdown("---")
-    # Consulta de pedidos
+
+    # --- consulta de pedidos existentes ---
     st.subheader("Consultar Pedidos Existentes")
     df_orders = get_purchase_orders(loja_id)
     if df_orders.empty:
