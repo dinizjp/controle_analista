@@ -66,7 +66,7 @@ def page_dash():
                                 default=ordered_cats,
                                 key="stock_cats")
 
-    # Puxa estoque e remove a coluna 'nome' e 'loja_id' duplicadas
+    # Puxa estoque e remove colunas duplicadas
     estoque_df = get_estoque_all(loja_id).drop(columns=['nome','loja_id'], errors='ignore')
 
     # Puxa produtos e renomeia 'nome' para evitar duplicata
@@ -97,8 +97,14 @@ def page_dash():
                                ordered_cats,
                                default=ordered_cats,
                                key="hist_cats")
-
+    # Busca histórico e adiciona categoria para permitir filtro
     df_hist = get_historico_produtos(loja_id, start_date, end_date)
+    df_hist = df_hist.merge(
+        prod_df[["produto_id", "categoria"]],
+        on="produto_id",
+        how="left"
+    )
+    df_hist = df_hist[df_hist["categoria"].isin(hist_cats)]
     st.dataframe(df_hist, use_container_width=True)
 
     # --- 5) Gráfico: Entradas e Saídas ---
@@ -114,19 +120,15 @@ def page_dash():
         .merge(prod_df[["prod_nome", "categoria"]],
                left_on="nome", right_on="prod_nome",
                how="left")
-        .drop(columns=["nome"])                  # descarta a coluna 'nome' original
-        .rename(columns={"prod_nome": "nome"})   # renomeia prod_nome para nome
+        .drop(columns=["nome"])
+        .rename(columns={"prod_nome": "nome"})
     )
     entradas_saidas = entradas_saidas[entradas_saidas["categoria"].isin(entries_cats)]
-
     if not entradas_saidas.empty:
         fig1 = px.bar(
             entradas_saidas,
-            x="nome",
-            y="total",
-            color="tipo",
-            barmode="group",
-            text="total",
+            x="nome", y="total", color="tipo",
+            barmode="group", text="total",
             height=800,
             color_discrete_map={'entrada': '#00CC96', 'saida': '#EF553B'}
         )
@@ -143,14 +145,12 @@ def page_dash():
                                 key="sales_cats")
     period_sales = get_period_sales(start_date, end_date, loja_id)
     period_sales = period_sales[period_sales["categoria"].isin(sales_cats)]
-
     if not period_sales.empty:
         fig2 = px.bar(period_sales,
-                      x="nome",
-                      y="total_vendido",
-                      color="categoria",
-                      text="total_vendido",
-                      height=800)
+                      x="nome", y="total_vendido",
+                      color="categoria", text="total_vendido",
+                      height=800
+        )
         fig2.update_traces(textposition='outside')
         st.plotly_chart(fig2, use_container_width=True)
     else:
